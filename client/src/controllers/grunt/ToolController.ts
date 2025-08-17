@@ -36,59 +36,87 @@ export class ToolController extends LogicController<Grunt> {
 			? 'REAPER'
 			: logic.tool;
 	}
-	useTool(logic: Grunt, target: Point) {
-		this.Grunt.face(logic, target);
+	validateToolUsage(logic: Grunt, target: Point): boolean {
+		if (!logic.tool) {
+			return false;
+		}
 		if (logic.stamina < 20) {
 			return false;
 		}
 		const traits = this.registry.getTileTraits(target);
 		switch (logic.tool) {
 			case 'BOMB':
-				this.useBomb(logic, target);
 				return true;
 			case 'BRICK':
 				if (!traits.includes('brickz')) {
 					return false;
 				}
+				const brick = this.registry.getLogicAt<Brickz>(target, 'Brickz');
+				if (brick && brick.value.length == 3) {
+					return false;
+				}
+				if (pointEquals(logic.coord, target)) {
+					return false;
+				}
+				return true;
+			case 'GAUNTLETZ':
+				return traits.includes('break');
+			case 'GOOBER':
+				const puddle = this.registry.tileLogics
+					.get(target)
+					?.find(logic => logic.kind == 'GruntPuddle') as GruntPuddle | undefined;
+				return !!(puddle && !puddle.actionTime);
+			case 'SHOVEL':
+				return traits.includes('dig');
+			case 'SPY':
+				return true;
+			case 'TIMEBOMB':
+				return !(
+					traits.includes('solid') ||
+					traits.includes('nogo') ||
+					traits.includes('water') ||
+					traits.includes('hole')
+				);
+			case 'WAND':
+				return true;
+		}
+		return false;
+	}
+	canUseTool(logic: Grunt, target: Point): boolean {
+		return this.validateToolUsage(logic, target);
+	}
+	useTool(logic: Grunt, target: Point) {
+		this.Grunt.face(logic, target);
+		if (!this.validateToolUsage(logic, target)) {
+			return false;
+		}
+		
+		switch (logic.tool) {
+			case 'BOMB':
+				this.useBomb(logic, target);
+				return true;
+			case 'BRICK':
 				if (this.useBrick(logic, target)) {
 					return true;
 				} else {
 					return false;
 				}
 			case 'GAUNTLETZ':
-				if (!traits.includes('break')) {
-					return false;
-				}
 				this.useGauntletz(logic, target);
 				return true;
 			case 'GOOBER':
 				const puddle = this.registry.tileLogics
 					.get(target)
 					?.find(logic => logic.kind == 'GruntPuddle') as GruntPuddle | undefined;
-				if (!puddle || puddle.actionTime) {
-					return false;
-				}
-				this.useGoober(logic, puddle);
+				this.useGoober(logic, puddle!);
 				return true;
-
 			case 'SHOVEL':
-				if (!traits.includes('dig')) {
-					return false;
-				}
 				this.useShovel(logic, target);
 				return true;
 			case 'SPY':
 				this.useSpy(logic);
 				return true;
 			case 'TIMEBOMB':
-				if (
-					traits.includes('solid') ||
-					traits.includes('nogo') ||
-					traits.includes('water') ||
-					traits.includes('hole')
-				) {
-					return false;
-				}
 				this.useTimeBomb(logic, target);
 				return true;
 			case 'WAND':

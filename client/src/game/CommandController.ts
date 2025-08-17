@@ -13,6 +13,7 @@ import {
 import { Level } from './Level';
 import { ClickInfo, DragItem } from './InputController';
 import { GruntView } from '../views/GruntView';
+import { ADJACENTS } from 'client/data/data';
 
 export class CommandController {
 	selection: Grunt[] = [];
@@ -128,11 +129,29 @@ export class CommandController {
 	}
 	navigateGrunts(target: Point, info: ClickInfo, grunts: Grunt[]) {
 		const flood = this.level.controllers.Grunt.getFlood(grunts[0], target);
-		const Grunt = this.level.controllers.Grunt;
 		const movingGrunts = grunts.filter(grunt => {
 			const coord = grunt.coord;
 			const isRangedTool = this.level.controllers.GruntAttack.canUseRangedTool(grunt, target);
-			return flood.findPath(coord) || isRangedTool;
+			const canReachTarget = flood.findPath(coord) || isRangedTool;
+			
+			if (info.targetEnemyGrunt) {
+				return canReachTarget;
+			}
+			if (info.useTool && canReachTarget && !isRangedTool) {
+				if (!this.canToolBeUsedOnTarget(grunt, target)) {
+					return false;
+				}
+				const targetDistance = flood.getDistance(coord);
+				if (targetDistance <= 1) {
+					return this.level.controllers.GruntTool.canUseTool(grunt, target);
+				}
+				return this.canGruntReachAdjacentToTarget(coord, target, flood);
+			}
+			if (!info.useTool && !isRangedTool) {
+				const tempFlood = this.level.controllers.Grunt.getFlood(grunt, target);
+				return tempFlood.isValidPoint(target) && canReachTarget;
+			}
+			return canReachTarget;
 		});
 		if (movingGrunts.length == 0) {
 			return [];
@@ -150,6 +169,20 @@ export class CommandController {
 				});
 			});
 		return movingGrunts;
+	}
+	canToolBeUsedOnTarget(grunt: Grunt, target: Point): boolean {
+		const tempGrunt = { ...grunt, coord: { x: target.x, y: target.y - 1 } };
+		return !!this.level.controllers.GruntTool.canUseTool(tempGrunt, target);
+	}
+	canGruntReachAdjacentToTarget(gruntCoord: Point, target: Point, flood: any): boolean {
+		for (const dir of ADJACENTS) {
+			const adjacentPos = { x: target.x + dir.x, y: target.y + dir.y };
+			if (flood.getDistance(adjacentPos) < Infinity) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 	speakSelect(info: ClickInfo, grunt: Grunt) {
 		let voices = SELECT_VOICES;
